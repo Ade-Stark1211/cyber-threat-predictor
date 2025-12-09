@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Threat Predictive Analytics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1f1f1f;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: #0d6efd;
+            padding: 20px;
+            text-align: center;
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #fff;
+        }
+        main {
+            padding: 20px;
+            max-width: 900px;
+            margin: auto;
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
+        }
+        input, select, textarea, button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            border: none;
+        }
+        button {
+            background-color: #0d6efd;
+            color: #fff;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        button:hover {
+            background-color: #084298;
+        }
+        .result {
+            background-color: #2c2c2c;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .threat-level {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        canvas {
+            background-color: #fff;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>Cyber Threat Predictive Analytics</header>
+    <main>
+        <h2>Forecast Future Threats & Prioritize Security Measures</h2>
+        <form id="threatForm">
+            <label for="threatData">Historical Threat Data (JSON format):</label>
+            <textarea id="threatData" rows="6" placeholder='[{"type":"malware","count":50,"date":"2025-12-01"}, {"type":"phishing","count":20,"date":"2025-12-02"}]'></textarea>
+
+            <label for="forecastDays">Forecast Days:</label>
+            <input type="number" id="forecastDays" value="7" min="1" max="30">
+
+            <button type="submit">Predict Threats</button>
+        </form>
+
+        <div class="result" id="result" style="display:none;">
+            <h3>Prediction Results</h3>
+            <div id="predictionOutput"></div>
+            <canvas id="threatChart" width="800" height="400"></canvas>
+        </div>
+    </main>
+
+    <script>
+        // Define risk level color mapping
+        const riskColors = {
+            "High": "red",
+            "Medium": "orange",
+            "Low": "green"
+        };
+
+        function getRiskLevel(count) {
+            if (count > 50) return "High";
+            else if (count > 20) return "Medium";
+            else return "Low";
+        }
+
+        document.getElementById("threatForm").addEventListener("submit", async function(e) {
+            e.preventDefault();
+
+            const rawData = document.getElementById("threatData").value;
+            const forecastDays = parseInt(document.getElementById("forecastDays").value);
+
+            let data;
+            try {
+                data = JSON.parse(rawData);
+            } catch(err) {
+                alert("Please enter valid JSON data.");
+                return;
+            }
+
+            // === Fetch predictions from FastAPI backend ===
+            let predictions = [];
+            try {
+                const response = await fetch("http://127.0.0.1:8000/predict", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ data: data, forecastDays: forecastDays })
+                });
+                if (!response.ok) throw new Error("Network response was not ok");
+                predictions = await response.json();
+            } catch(err) {
+                alert("Failed to fetch predictions from backend: " + err);
+                return;
+            }
+
+            // Display prediction results with risk levels
+            const outputDiv = document.getElementById("predictionOutput");
+            outputDiv.innerHTML = "";
+            predictions.forEach(pred => {
+                const risk = getRiskLevel(pred.forecast);
+                const div = document.createElement("div");
+                div.innerHTML = `<span class="threat-level">${pred.type.toUpperCase()}</span>: Forecasted Count - ${pred.forecast} 
+                                 <span style="color:${riskColors[risk]}; font-weight:bold;">(${risk} Risk)</span>`;
+                outputDiv.appendChild(div);
+            });
+
+            // Prepare chart data
+            const labels = predictions.map(p => p.type.toUpperCase());
+            const forecastCounts = predictions.map(p => p.forecast);
+            const backgroundColors = forecastCounts.map(c => riskColors[getRiskLevel(c)]);
+
+            // Render chart
+            const ctx = document.getElementById('threatChart').getContext('2d');
+            if (window.threatChartInstance) window.threatChartInstance.destroy();
+            window.threatChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Forecasted Threat Count',
+                        data: forecastCounts,
+                        backgroundColor: backgroundColors
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        title: { display: true, text: 'Predicted Threats with Risk Levels' }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+
+            document.getElementById("result").style.display = "block";
+        });
+    </script>
+</body>
+</html>
